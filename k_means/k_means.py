@@ -1,15 +1,16 @@
 import numpy as np 
 import pandas as pd 
+import random
 # IMPORTANT: DO NOT USE ANY OTHER 3RD PARTY PACKAGES
 # (math, random, collections, functools, etc. are perfectly fine)
 
 
 class KMeans:
     
-    def __init__():
-        # NOTE: Feel free add any hyperparameters 
-        # (with defaults) as you see fit
-        pass
+    def __init__(self, k=2, max_iterations=10):
+        self.k = k
+        self.max_iterations = max_iterations
+        self.centroids = None
         
     def fit(self, X):
         """
@@ -19,8 +20,34 @@ class KMeans:
             X (array<m,n>): a matrix of floats with
                 m rows (#samples) and n columns (#features)
         """
-        # TODO: Implement
-        raise NotImplemented()
+
+        if isinstance(X, pd.DataFrame):
+            X = X.to_numpy()
+
+        m = X.shape[0]
+        n = X.shape[1]
+
+        # Initialize centroids randomly
+        self.centroids = X[np.random.choice(X.shape[0], self.k, replace=False),:]
+        
+        for _ in range(self.max_iterations):
+            # Assign each data point to the nearest centroid
+            X_temp = np.expand_dims(X,axis=1)
+            distances = euclidean_distance(X_temp, self.centroids)
+            nearest_centroid = np.argmin(distances,axis=1)
+            
+            # Update centroids based on the mean of data points in each cluster
+            new_centroids = np.array([X[nearest_centroid == i].mean(axis=0) for i, _ in enumerate(self.centroids)])
+            
+            # Stopping condition 
+            if np.all(new_centroids == self.centroids):
+                break
+                
+            self.centroids = new_centroids
+        
+
+        
+        
     
     def predict(self, X):
         """
@@ -38,8 +65,15 @@ class KMeans:
             there are 3 clusters, then a possible assignment
             could be: array([2, 0, 0, 1, 2, 1, 1, 0, 2, 2])
         """
-        # TODO: Implement 
-        raise NotImplemented()
+        # make X a numpy array
+        if isinstance(X, pd.DataFrame):
+            X = X.to_numpy()
+
+        X_temp = np.expand_dims(X,axis=1) # reshaping to make broadcasting possible
+        distances = euclidean_distance(X_temp, self.centroids)
+        nearest_centroid = np.argmin(distances,axis=1)
+
+        return nearest_centroid
     
     def get_centroids(self):
         """
@@ -56,7 +90,8 @@ class KMeans:
             [xm_1, xm_2, ..., xm_n]
         ])
         """
-        pass
+
+        return self.centroids
     
     
     
@@ -111,7 +146,7 @@ def euclidean_distortion(X, z):
     for i, c in enumerate(clusters):
         Xc = X[z == c]
         mu = Xc.mean(axis=0)
-        distortion += ((Xc - mu) ** 2).sum(axis=1)
+        distortion += ((Xc - mu) ** 2).sum()
         
     return distortion
 
@@ -154,4 +189,32 @@ def euclidean_silhouette(X, z):
     b = (D + inf_mask).min(axis=1)
     
     return np.mean((b - a) / np.maximum(a, b))
-  
+
+class MinMaxScaler():
+    def fit(self,X):
+        X = self.convert_to_DataFrame(X)
+        self.min_vals = X.min()
+        self.max_vals = X.max()
+        self.range_vals = self.max_vals - self.min_vals
+
+    def transform(self,X):
+        X = self.convert_to_DataFrame(X)
+        X.columns = self.min_vals.index # make sure both have the same column names
+
+
+        return (X - self.min_vals) / self.range_vals
+    
+    def de_transform(self,X_transformed):
+        X_transformed = self.convert_to_DataFrame(X_transformed)
+        X_transformed.columns = self.min_vals.index # make sure both have the same column names
+        test = X_transformed * self.range_vals + self.min_vals
+        return test
+    
+    def convert_to_DataFrame(self,X):
+        if not isinstance(X,pd.DataFrame):
+            return pd.DataFrame(X)
+        return X
+    
+
+        
+    

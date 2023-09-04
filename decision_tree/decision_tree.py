@@ -6,11 +6,19 @@ import pandas as pd
 
 class DecisionTree:
     
-    def __init__():
+    def __init__(self, max_depth=None, min_samples_split=2, min_samples_leafs=1):
         # NOTE: Feel free add any hyperparameters 
         # (with defaults) as you see fit
-        pass
-    
+        self.model = None
+        self.max_depth = max_depth
+        self.min_samples_split = min_samples_split
+        self.min_samples_leafs = min_samples_leafs
+
+    def __repr__(self):
+        return str(f'DecisionTree(max_depth={self.max_depth}, min_samples_split={self.min_samples_split}, min_samples_leafs={self.min_samples_leafs})')
+
+    def show_model(self):
+        return self.model.__repr__()
     def fit(self, X, y):
         """
         Generates a decision tree for classification
@@ -21,8 +29,9 @@ class DecisionTree:
                 to the features.
             y (pd.Series): a vector of discrete ground-truth labels
         """
-        # TODO: Implement 
-        raise NotImplementedError()
+        self.model = Node(None)
+        self.model.fit(X, y, remaining_depth=self.max_depth, min_samples_split=self.min_samples_split, min_samples_leafs=self.min_samples_leafs)
+
     
     def predict(self, X):
         """
@@ -38,8 +47,8 @@ class DecisionTree:
         Returns:
             A length m vector with predictions
         """
-        # TODO: Implement 
-        raise NotImplementedError()
+        self.model.reset_n_examples()
+        return X.apply(self.model.predict, axis=1)
     
     def get_rules(self):
         """
@@ -59,8 +68,7 @@ class DecisionTree:
             ...
         ]
         """
-        # TODO: Implement
-        raise NotImplementedError()
+        return self.model.get_rules()
 
 
 # --- Some utility functions 
@@ -102,5 +110,107 @@ def entropy(counts):
     probs = probs[probs > 0]  # Avoid log(0)
     return - np.sum(probs * np.log2(probs))
 
+def oneHotEncode(df,y):
+    for col in df.drop(y,axis=1).columns:
+        if df[col].dtype == 'object':
+            df = pd.concat([df.drop(columns=[col]), pd.get_dummies(df[col], prefix=col)], axis=1)
+    return df
 
 
+class Node:
+    def __init__(self, parent):
+        self.parent = parent
+        self.children = {}
+        self.split_attr = None
+        self.label = None
+        self.n_examples = 0
+
+    def fit(self, X, y, remaining_depth=None, min_samples_split=2, min_samples_leafs=1):
+        self.label = pd.value_counts(y).idxmax()
+        if remaining_depth is not None:
+            if remaining_depth == 0:
+                return
+            else:
+                remaining_depth -= 1
+
+        if X.shape[0] < min_samples_split:
+            return
+            
+        if len(np.unique(y)) == 1:
+            return
+        
+        if X.shape[1] == 0:
+            return
+        
+        ent = entropy(pd.value_counts(y).to_numpy())
+        best_attr = self._get_best_split(X, y, ent)
+
+        if best_attr is None:
+            return
+
+        self.split_attr = best_attr
+
+        for val in np.unique(X[best_attr]):
+            y_child = y[X[best_attr] == val]
+            X_child = X[X[best_attr] == val].drop(columns=[best_attr])
+
+            if y_child.shape[0] < min_samples_leafs:
+                continue
+
+            self.children[val] = Node(self)
+            self.children[val].fit(X_child,y_child, remaining_depth=remaining_depth, min_samples_split=min_samples_split, min_samples_leafs=min_samples_leafs)
+        
+
+            
+    def reset_n_examples(self):
+        self.n_examples = 0
+        for child in self.children.values():
+            child.reset_n_examples()
+
+    def predict(self, X):
+        self.n_examples += 1
+        if self.split_attr is None:
+            return self.label
+        else: 
+            if X[self.split_attr] not in self.children:
+                return self.label
+            else:
+                return self.children[X[self.split_attr]].predict(X)
+    
+    def get_rules(self):
+        if self.split_attr is None:
+            return [([], self.label)]
+        else:
+            rules = []
+            for val, child in self.children.items():
+                rules += [([(self.split_attr, val)] + r, l) for r, l in child.get_rules()]
+            return rules
+
+    def _get_best_split(self, X, y, ent):
+        best_attr = None
+        highest_ig = 0
+
+        for attr_name, attr_values in X.items():
+            ents = [entropy(y[attr_values==attr_value].value_counts().to_numpy()) for attr_value in attr_values.unique()]
+            probs = [y[attr_values==attr_value].shape[0] for attr_value in attr_values.unique()]
+            ig = ent - np.dot(ents,probs)/np.sum(probs)
+            if ig > highest_ig:
+                best_attr = attr_name
+                highest_ig = ig
+        
+        return best_attr
+
+
+    def __repr__(self, level=0):
+        if self.split_attr is None:
+            #return str('\t'*level + '-> ' + self.label + str(self.n_examples) + '\n')
+            return f'{self.split_attr}, --> {self.label} ({self.n_examples})\n'
+        
+        else:
+            s = f'{self.split_attr}==, --> {self.label} ({self.n_examples})\n'
+            for val, child in self.children.items():
+                s += str('\t'*(level+1) + str(val) + ',')
+                s += child.__repr__(level+1)
+            return s
+    
+    # value, split_attr, label, n_examples

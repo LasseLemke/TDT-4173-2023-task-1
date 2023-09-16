@@ -125,7 +125,7 @@ class Node:
         self.label = None
         self.n_examples = 0
 
-    def fit(self, X, y, remaining_depth=None, min_samples_split=2, min_samples_leafs=1):
+    def fit(self, X, y, remaining_depth=None, min_samples_split=2, min_samples_leafs=1, break_func=None):
         self.label = pd.value_counts(y).idxmax()
         if remaining_depth is not None:
             if remaining_depth == 0:
@@ -140,6 +140,9 @@ class Node:
             return
         
         if X.shape[1] == 0:
+            return
+        
+        if break_func(y):
             return
         
         ent = entropy(pd.value_counts(y).to_numpy())
@@ -171,11 +174,11 @@ class Node:
         self.n_examples += 1
         if self.split_attr is None:
             return self.label
-        else: 
-            if X[self.split_attr] not in self.children:
-                return self.label
-            else:
-                return self.children[X[self.split_attr]].predict(X)
+
+        if X[self.split_attr] not in self.children:
+            return self.label
+        
+        return self.children[X[self.split_attr]].predict(X)
     
     def get_rules(self):
         if self.split_attr is None:
@@ -203,7 +206,6 @@ class Node:
 
     def __repr__(self, level=0):
         if self.split_attr is None:
-            #return str('\t'*level + '-> ' + self.label + str(self.n_examples) + '\n')
             return f'{self.split_attr}, --> {self.label} ({self.n_examples})\n'
         
         else:
@@ -213,4 +215,3 @@ class Node:
                 s += child.__repr__(level+1)
             return s
     
-    # value, split_attr, label, n_examples

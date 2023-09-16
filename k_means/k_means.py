@@ -7,10 +7,12 @@ import random
 
 class KMeans:
     
-    def __init__(self, k=2, max_iterations=10):
+    def __init__(self, k=2, max_iterations=100, total_iterations=10, criterium='silhouette'):
         self.k = k
         self.max_iterations = max_iterations
         self.centroids = None
+        self.total_iterations = total_iterations
+        self.criterium = criterium
         
     def fit(self, X):
         """
@@ -20,30 +22,49 @@ class KMeans:
             X (array<m,n>): a matrix of floats with
                 m rows (#samples) and n columns (#features)
         """
-
         if isinstance(X, pd.DataFrame):
-            X = X.to_numpy()
+                X = X.to_numpy()
 
-        m = X.shape[0]
-        n = X.shape[1]
+        best_sillhouette = 0
+        best_distortion = float('inf')
+        best_centroids = None
 
-        # Initialize centroids randomly
-        self.centroids = X[np.random.choice(X.shape[0], self.k, replace=False),:]
-        
-        for _ in range(self.max_iterations):
-            # Assign each data point to the nearest centroid
-            X_temp = np.expand_dims(X,axis=1)
-            distances = euclidean_distance(X_temp, self.centroids)
-            nearest_centroid = np.argmin(distances,axis=1)
+        for _ in range(self.total_iterations):
+            # Initialize centroids randomly
+            self.centroids = X[np.random.choice(X.shape[0], self.k, replace=False),:]
             
-            # Update centroids based on the mean of data points in each cluster
-            new_centroids = np.array([X[nearest_centroid == i].mean(axis=0) for i, _ in enumerate(self.centroids)])
-            
-            # Stopping condition 
-            if np.all(new_centroids == self.centroids):
-                break
+            for i in range(self.max_iterations):
+                # Assign each data point to the nearest centroid
+                X_temp = np.expand_dims(X,axis=1)
+                distances = euclidean_distance(X_temp, self.centroids)
+                nearest_centroid = np.argmin(distances,axis=1)
                 
-            self.centroids = new_centroids
+                # Update centroids based on the mean of data points in each cluster
+                new_centroids = np.array([X[nearest_centroid == i].mean(axis=0) for i, _ in enumerate(self.centroids)])
+                
+                # Stopping condition 
+                if np.all(new_centroids == self.centroids):
+                    break
+                    
+                self.centroids = new_centroids
+
+            z = self.predict(X)
+
+            if self.criterium == 'silhouette':
+                silhouette = euclidean_silhouette(X, z)
+                if silhouette > best_sillhouette:
+                    best_sillhouette = silhouette
+                    best_centroids = self.centroids
+            elif self.criterium == 'distortion':
+                distortion = euclidean_distortion(X, z)
+                if distortion < best_distortion:
+                    best_distortion = distortion
+                    best_centroids = self.centroids
+            else:
+                raise Exception('not a valid criterium')
+
+        self.centroids = best_centroids
+
         
 
         
